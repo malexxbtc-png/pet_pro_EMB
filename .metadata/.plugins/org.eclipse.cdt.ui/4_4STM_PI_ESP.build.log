@@ -1,0 +1,10 @@
+15:28:04 **** Incremental Build of configuration Debug for project 4_4STM_PI_ESP ****
+make -j8 all 
+arm-none-eabi-size  4_4STM_PI_ESP.elf 
+   text	   data	    bss	    dec	    hex	filename
+  24912	     92	   2156	  27160	   6a18	4_4STM_PI_ESP.elf
+Finished building: default.size.stdout
+ 
+
+15:28:05 Build Finished. 0 errors, 0 warnings. (took 1s.217ms)
+

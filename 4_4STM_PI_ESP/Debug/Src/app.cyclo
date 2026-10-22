@@ -1,0 +1,6 @@
+../Src/app.c:26:13:i2c2_recover	2
+../Src/app.c:57:13:pack_block	1
+../Src/app.c:71:13:publish	1
+../Src/app.c:78:13:startup_blink	2
+../Src/app.c:88:6:App_Init	3
+../Src/app.c:110:6:App_Loop	9

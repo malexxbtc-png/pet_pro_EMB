@@ -1,0 +1,124 @@
+#include "i2c_slave.h"
+#include <string.h>
+
+/* Визначені в main.c (CubeMX). У main.c з MX_I2C1_Init треба прибрати слово static */
+extern I2C_HandleTypeDef hi2c1;
+void MX_I2C1_Init(void);
+
+#define BUSY_TIMEOUT_MS  100
+
+static uint8_t           s_regs[REGMAP_SIZE];
+static uint8_t           s_rx;                 /* прийнятий байт (адреса регістра) */
+static volatile uint8_t  s_ptr;                /* поточний вказівник регістра */
+static volatile uint8_t  s_busy;               /* 1 = йде транзакція з Pico */
+static volatile uint32_t s_busy_since;
+static volatile uint32_t s_errors;
+static uint8_t           s_ff = 0xFF;          /* відповідь для адрес поза картою */
+
+uint8_t crc8_07(const uint8_t *data, uint8_t len)
+{
+    uint8_t crc = 0x00;
+    while (len--) {
+        crc ^= *data++;
+        for (uint8_t i = 0; i < 8; i++) {
+            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
+        }
+    }
+    return crc;
+}
+
+void I2CS_Init(void)
+{
+    memset(s_regs, 0, sizeof(s_regs));
+    s_regs[REG_WHO_AM_I] = WHO_AM_I_VALUE;
+    s_ptr = 0;
+    s_busy = 0;
+    HAL_I2C_EnableListen_IT(&hi2c1);
+}
+
+uint8_t I2CS_SetRegs(uint8_t status, uint8_t heartbeat, const uint8_t block10[10])
+{
+    __disable_irq();
+    if (s_busy) {
+        __enable_irq();
+        return 0;
+    }
+    s_regs[REG_STATUS]    = status;
+    s_regs[REG_HEARTBEAT] = heartbeat;
+    memcpy(&s_regs[REG_DATA], block10, 10);
+    s_regs[REG_CRC] = crc8_07(block10, 10);
+    __enable_irq();
+    return 1;
+}
+
+void I2CS_Poll(void)
+{
+    /* Зависла транзакція: перезапуск периферії */
+    if (s_busy && (HAL_GetTick() - s_busy_since) > BUSY_TIMEOUT_MS) {
+        HAL_I2C_DeInit(&hi2c1);
+        MX_I2C1_Init();
+        s_busy = 0;
+        s_errors++;
+    }
+    /* Самовідновлення: якщо периферія вільна, але не слухає шину */
+    if (hi2c1.State == HAL_I2C_STATE_READY) {
+        HAL_I2C_EnableListen_IT(&hi2c1);
+    }
+}
+
+uint32_t I2CS_GetErrors(void) { return s_errors; }
+
+/* ---------- Колбеки HAL ---------- */
+
+void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode)
+{
+    (void)AddrMatchCode;
+    if (hi2c->Instance != I2C1) return;
+
+    if (!s_busy) {
+        s_busy = 1;
+        s_busy_since = HAL_GetTick();
+    }
+
+    if (TransferDirection == I2C_DIRECTION_TRANSMIT) {
+        /* Master пише: перший байт = адреса регістра */
+        HAL_I2C_Slave_Seq_Receive_IT(hi2c, &s_rx, 1, I2C_FIRST_FRAME);
+    } else {
+        /* Master читає, починаючи з s_ptr; кількість визначає сам master (NACK) */
+        uint8_t p = s_ptr;
+        if (p < REGMAP_SIZE) {
+            HAL_I2C_Slave_Seq_Transmit_IT(hi2c, &s_regs[p], (uint16_t)(REGMAP_SIZE - p), I2C_LAST_FRAME);
+        } else {
+            HAL_I2C_Slave_Seq_Transmit_IT(hi2c, &s_ff, 1, I2C_LAST_FRAME);
+        }
+    }
+}
+
+void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance != I2C1) return;
+    s_ptr = s_rx;
+}
+
+void HAL_I2C_SlaveTxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    (void)hi2c;   /* Усі байти відправлено; завершення обробить ListenCplt */
+}
+
+void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance != I2C1) return;
+    s_busy = 0;
+    HAL_I2C_EnableListen_IT(hi2c);
+}
+
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+{
+    if (hi2c->Instance != I2C1) return;
+    uint32_t e = HAL_I2C_GetError(hi2c);
+    if (e & ~((uint32_t)HAL_I2C_ERROR_AF)) {   /* AF (NACK) наприкінці читання це норма */
+        s_errors++;
+    }
+    s_busy = 0;
+    HAL_I2C_EnableListen_IT(hi2c);
+}

@@ -1,0 +1,21 @@
+#ifndef BME280_H
+#define BME280_H
+
+#include "stm32f4xx_hal.h"
+
+extern void MX_I2C2_Init(void);
+
+typedef struct {
+    int16_t  temperature;  // T * 100
+    uint16_t humidity;     // RH * 100 (0xFFFF якщо BMP280)
+    uint32_t pressure;     // Паскалі
+    uint16_t dew_point;    // Точка роси * 100
+    uint8_t  sensor_ok;    // 1 - датчик працює, 0 - помилка
+    uint8_t  is_bme280;    // 1 - BME280, 0 - BMP280
+} SensorData_t;
+
+void I2C2_Bus_Recovery(void);
+uint8_t BME280_Init(I2C_HandleTypeDef *hi2c, SensorData_t *data);
+void BME280_Read_Data(I2C_HandleTypeDef *hi2c, SensorData_t *data);
+
+#endif

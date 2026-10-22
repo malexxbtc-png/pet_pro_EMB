@@ -1,0 +1,11 @@
+../Src/bme280.c:30:26:rd	32	static
+../Src/bme280.c:35:26:wr	32	static
+../Src/bme280.c:40:17:u16le	16	static
+../Src/bme280.c:41:17:s16le	16	static
+../Src/bme280.c:43:12:BME280_Type	4	static
+../Src/bme280.c:45:19:BME280_Init	72	static
+../Src/bme280.c:102:16:comp_T	24	static
+../Src/bme280.c:112:17:comp_P	328	static
+../Src/bme280.c:130:17:comp_H	24	static
+../Src/bme280.c:143:16:dewpoint_x100	40	static
+../Src/bme280.c:155:19:BME280_Read	48	static

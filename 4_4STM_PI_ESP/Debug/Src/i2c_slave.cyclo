@@ -1,0 +1,10 @@
+../Src/i2c_slave.c:18:9:crc8_07	4
+../Src/i2c_slave.c:30:6:I2CS_Init	1
+../Src/i2c_slave.c:39:9:I2CS_SetRegs	3
+../Src/i2c_slave.c:55:6:I2CS_Poll	4
+../Src/i2c_slave.c:70:10:I2CS_GetErrors	1
+../Src/i2c_slave.c:74:6:HAL_I2C_AddrCallback	5
+../Src/i2c_slave.c:98:6:HAL_I2C_SlaveRxCpltCallback	2
+../Src/i2c_slave.c:104:6:HAL_I2C_SlaveTxCpltCallback	1
+../Src/i2c_slave.c:109:6:HAL_I2C_ListenCpltCallback	2
+../Src/i2c_slave.c:116:6:HAL_I2C_ErrorCallback	3

@@ -1,0 +1,29 @@
+#ifndef I2C_SLAVE_H
+#define I2C_SLAVE_H
+
+#include "main.h"
+#include <stdint.h>
+
+/* Регістрова карта (I2C1 slave, адреса 0x30) */
+#define REG_WHO_AM_I     0x00   /* 0x53 */
+#define REG_STATUS       0x01   /* bit0 датчик ok, bit1 є вологість */
+#define REG_HEARTBEAT    0x02   /* ++ раз на 1 с */
+#define REG_DATA         0x10   /* 10 байт даних */
+#define REG_CRC          0x1A   /* CRC8 (poly 0x07) по 10 байтах з 0x10 */
+#define REGMAP_SIZE      0x1B
+
+#define WHO_AM_I_VALUE   0x53
+#define STATUS_SENSOR_OK 0x01
+#define STATUS_HAS_RH    0x02
+
+void     I2CS_Init(void);
+void     I2CS_Poll(void);   /* викликати часто з головного циклу */
+
+/* Оновлює регістри атомарно. Повертає 1, якщо застосовано; 0, якщо шина зараз зайнята Pico */
+uint8_t  I2CS_SetRegs(uint8_t status, uint8_t heartbeat, const uint8_t block10[10]);
+
+uint32_t I2CS_GetErrors(void);
+
+uint8_t  crc8_07(const uint8_t *data, uint8_t len);
+
+#endif /* I2C_SLAVE_H */

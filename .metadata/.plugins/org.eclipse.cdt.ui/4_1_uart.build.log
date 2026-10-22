@@ -1,0 +1,7 @@
+20:28:42 **** Incremental Build of configuration Debug for project 4_1_uart ****
+make -j8 all 
+make: *** No rule to make target '-u _printf_float', needed by '4_1_uart.elf'.  Stop.
+"make -j8 all" terminated with exit code 2. Build might be incomplete.
+
+20:28:43 Build Failed. 1 errors, 0 warnings. (took 767ms)
+

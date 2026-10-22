@@ -1,0 +1,162 @@
+#include "app.h"
+#include "main.h"
+#include "bme280.h"
+#include "i2c_slave.h"
+#include <string.h>
+
+/* Якщо пін PC13 не названо LED у CubeMX, задаємо вручну */
+#ifndef LED_Pin
+#define LED_Pin        GPIO_PIN_13
+#define LED_GPIO_Port  GPIOC
+#endif
+
+/* Визначені в main.c (CubeMX). У main.c з MX_I2C2_Init треба прибрати слово static */
+extern I2C_HandleTypeDef hi2c2;
+void MX_I2C2_Init(void);
+
+#if defined(HAL_IWDG_MODULE_ENABLED)
+extern IWDG_HandleTypeDef hiwdg;
+#endif
+
+#define SENSOR_PERIOD_MS   1000
+#define LED_OK_MS          500    /* блимання 1 Гц при нормі */
+#define LED_ERR_MS         100    /* швидке блимання при помилці датчика */
+#define SENSOR_FAIL_LIMIT  3
+
+static uint8_t  s_block[10];      /* поточний блок даних (T, RH, P, Td) */
+static uint8_t  s_status;
+static uint8_t  s_heartbeat;
+static uint8_t  s_sensor_ok;
+static uint8_t  s_fail_cnt;
+static uint32_t s_t_sensor, s_t_led;
+
+/* Відновлення шини I2C2: 9 імпульсів SCL, STOP, повторна ініціалізація */
+static void i2c2_recover(void)
+{
+    HAL_I2C_DeInit(&hi2c2);
+
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitTypeDef g = {0};
+    g.Pin   = GPIO_PIN_10 | GPIO_PIN_3;       /* SCL, SDA */
+    g.Mode  = GPIO_MODE_OUTPUT_OD;
+    g.Pull  = GPIO_PULLUP;
+    g.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOB, &g);
+
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3 | GPIO_PIN_10, GPIO_PIN_SET);
+    HAL_Delay(1);
+    for (int i = 0; i < 9; i++) {
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+        HAL_Delay(1);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
+        HAL_Delay(1);
+    }
+    /* Умова STOP */
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_SET);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+    HAL_Delay(1);
+
+    MX_I2C2_Init();
+}
+
+static void pack_block(const bme_data_t *d)
+{
+    int16_t  t  = (int16_t)d->t_x100;
+    uint16_t rh = (uint16_t)d->rh_x100;
+    uint32_t p  = d->p_pa;
+    int16_t  td = d->td_x100;
+
+    s_block[0] = (uint8_t)(t & 0xFF);          s_block[1] = (uint8_t)((uint16_t)t >> 8);
+    s_block[2] = (uint8_t)(rh & 0xFF);         s_block[3] = (uint8_t)(rh >> 8);
+    s_block[4] = (uint8_t)(p & 0xFF);          s_block[5] = (uint8_t)((p >> 8) & 0xFF);
+    s_block[6] = (uint8_t)((p >> 16) & 0xFF);  s_block[7] = (uint8_t)((p >> 24) & 0xFF);
+    s_block[8] = (uint8_t)(td & 0xFF);         s_block[9] = (uint8_t)((uint16_t)td >> 8);
+}
+
+static void publish(void)
+{
+    /* Якщо Pico зараз читає, пропустимо; наступна спроба буде при наступному проході */
+    I2CS_SetRegs(s_status, s_heartbeat, s_block);
+}
+
+void App_Init(void)
+{
+    /* ТЕСТ ПРОШИВКИ: 6 швидких блимань після скидання (12 перемикань по 100 мс).
+       Видалити, коли переконаєтесь, що все працює. */
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    GPIO_InitTypeDef gt = {0};
+    gt.Pin = GPIO_PIN_13;
+    gt.Mode = GPIO_MODE_OUTPUT_PP;
+    gt.Pull = GPIO_NOPULL;
+    gt.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOC, &gt);
+    for (int i = 0; i < 12; i++) {
+        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+        HAL_Delay(100);
+    }
+
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);   /* LED вимкнено (активний 0) */
+    memset(s_block, 0, sizeof(s_block));
+    s_block[2] = 0xFF; s_block[3] = 0xFF;                       /* RH = N/A */
+    s_block[8] = 0x00; s_block[9] = 0x80;                       /* Td = INT16_MIN (N/A) */
+
+    s_sensor_ok = (BME280_Init(&hi2c2) == HAL_OK);
+    s_status = s_sensor_ok ? STATUS_SENSOR_OK : 0;
+    if (s_sensor_ok && BME280_Type() == BME_BME280) s_status |= STATUS_HAS_RH;
+
+    I2CS_Init();
+    publish();
+
+    s_t_sensor = HAL_GetTick();
+    s_t_led = s_t_sensor;
+}
+
+void App_Loop(void)
+{
+#if defined(HAL_IWDG_MODULE_ENABLED)
+    HAL_IWDG_Refresh(&hiwdg);
+#endif
+    I2CS_Poll();
+
+    uint32_t now = HAL_GetTick();
+
+    /* Раз на 1 с: читання датчика і оновлення регістрів */
+    if ((now - s_t_sensor) >= SENSOR_PERIOD_MS) {
+        s_t_sensor = now;
+        s_heartbeat++;
+
+        if (!s_sensor_ok) {
+            if (BME280_Init(&hi2c2) == HAL_OK) {
+                s_sensor_ok = 1;
+                s_fail_cnt = 0;
+            } else {
+                i2c2_recover();
+            }
+        } else {
+            bme_data_t d;
+            if (BME280_Read(&d) == HAL_OK) {
+                s_fail_cnt = 0;
+                pack_block(&d);
+            } else if (++s_fail_cnt >= SENSOR_FAIL_LIMIT) {
+                s_sensor_ok = 0;
+                i2c2_recover();
+            }
+        }
+
+        s_status = s_sensor_ok ? STATUS_SENSOR_OK : 0;
+        if (s_sensor_ok && BME280_Type() == BME_BME280) s_status |= STATUS_HAS_RH;
+        publish();
+    }
+
+    /* Індикація: повільне блимання = норма, швидке = помилка датчика */
+#ifdef LED_Pin
+    uint32_t period = s_sensor_ok ? LED_OK_MS : LED_ERR_MS;
+    if ((now - s_t_led) >= period) {
+        s_t_led = now;
+        HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    }
+#endif
+}

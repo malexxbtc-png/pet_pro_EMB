@@ -1,0 +1,14 @@
+build.all.configs.enabled=false
+build.proj.ref.configs.enabled=false
+eclipse.preferences.version=1
+environment/workspace/C\:\\ST\\STM32CubeIDE_1.15.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.gnu-make.1.8.0_2.xxx\\tools\\bin/delimiter=;
+environment/workspace/C\:\\ST\\STM32CubeIDE_1.15.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.gnu-make.1.8.0_2.xxx\\tools\\bin/operation=append
+environment/workspace/C\:\\ST\\STM32CubeIDE_1.15.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.gnu-make.1.8.0_2.xxx\\tools\\bin/value=C\:\\ST\\STM32CubeIDE_1.15.0\\STM32CubeIDE\\
+environment/workspace/STM32CubeMX_PATH/delimiter=;
+environment/workspace/STM32CubeMX_PATH/operation=replace
+environment/workspace/STM32CubeMX_PATH/value=C\:\\Users\\malex\\AppData\\Local\\Programs\\STM32CubeMX
+environment/workspace/STM32_PRG_PATH/delimiter=;
+environment/workspace/STM32_PRG_PATH/operation=replace
+environment/workspace/STM32_PRG_PATH/value=C\:\\Program Files\\STMicroelectronics\\STM32Cube\\STM32CubeProgrammer\\bin
+environment/workspace/append=true
+environment/workspace/appendContributed=false

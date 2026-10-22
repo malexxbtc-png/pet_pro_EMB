@@ -1,0 +1,14 @@
+#ifndef I2C_H
+#define I2C_H
+
+#include "main.h"
+
+/* Зовнішні дескриптори I2C */
+extern I2C_HandleTypeDef hi2c1;
+extern I2C_HandleTypeDef hi2c2;
+
+/* Прототипи функцій ініціалізації */
+void MX_I2C1_Init(void);
+void MX_I2C2_Init(void);
+
+#endif /* I2C_H */
